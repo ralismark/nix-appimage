@@ -106,23 +106,31 @@
             chmod 755 $out
           '';
 
-        bundlers.toAppImage = drv:
+        bundlers.toAppImage =
           let
+            basename = p: pkgs.lib.lists.last (builtins.split "/" p);
+
+            program = drv:
+              assert pkgs.lib.assertMsg (drv?meta && drv.meta?mainProgram) "don't know main program for derivation '${drv}'";
+              "${drv}/bin/${drv.meta.mainProgram}";
+
             handler = {
-              app = mkappimage {
+              app = drv: mkappimage {
                 drv = drv.program;
                 entrypoint = drv.program;
-                name = "app";
+                name = basename drv.program;
               };
-              derivation = mkappimage {
+              derivation = drv: mkappimage {
                 drv = drv;
                 # TODO figure this out from drv.meta.mainProgram or something
-                entrypoint = "/bin/sh";
+                entrypoint = program drv;
                 name = drv.name;
               };
             };
+            known-types = builtins.concatStringsSep ", " (builtins.attrNames handler);
           in
-          assert pkgs.lib.assertMsg (handler ? ${drv.type}) "don't know how to make app image for type '${drv.type}'";
-          handler.${drv.type};
+          drv:
+            assert pkgs.lib.assertMsg (handler ? ${drv.type}) "don't know how to make app image for type '${drv.type}'; only know ${known-types}";
+            handler.${drv.type} drv;
       });
 }
