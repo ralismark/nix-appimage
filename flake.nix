@@ -74,6 +74,12 @@
             dd if=magic_bytes of=$out bs=1 count=3 seek=8 conv=notrunc status=none
           '';
 
+        # Produce an (probably non-conforming) AppImage.
+        #
+        # The AppImage type 2 format is simply the runtime binary concatenated
+        # with a squashfs. When running the AppImage, the squashfs binary is
+        # extracted/mounted at an arbitrary place and the AppRun binary within
+        # run.
         mkappimage = { drv, entrypoint, name }:
           let
             arch = builtins.head (builtins.split "-" system);
@@ -97,7 +103,7 @@
               -b 1M \
               ${extra-args}
             dd if=${packages.runtime} of=$out conv=notrunc
-            chmod +x $out
+            chmod 755 $out
           '';
 
         bundlers.toAppImage = drv:
