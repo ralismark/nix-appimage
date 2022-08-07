@@ -58,7 +58,13 @@
               ];
             } ''
             NIX_CFLAGS_COMPILE="$(pkg-config --cflags fuse) $NIX_CFLAGS_COMPILE"
-            $CC ${./runtime.c} -o $out \
+
+            # extra includes to make things work
+            mkdir -p include/squashfuse
+            echo "#include_next <squashfuse/squashfuse.h>" > include/squashfuse/squashfuse.h
+            cp ${squashfuse}/fuseprivate.h -t include/squashfuse
+
+            $CC ${appimage-runtime}/src/main.c -o $out \
               -I./include -D_FILE_OFFSET_BITS=64 -DGIT_COMMIT='"${git-commit}"' \
               -lfuse -lsquashfuse_ll -lzstd -lz -llzma -llz4 -llzo2 \
               -T ${appimage-runtime}/src/data_sections.ld
