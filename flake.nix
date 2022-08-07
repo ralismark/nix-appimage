@@ -1,8 +1,8 @@
 {
-  description = "A very basic flake";
+  description = "AppImage bundler";
 
   inputs = {
-    nixpkgs.url = "nixpkgs/nixos-22.05"; # or "github:nixos/nixpkgs/nixpkgs-unstable"
+    nixpkgs.url = "nixpkgs/nixos-22.05";
 
     flake-utils = {
       url = "github:numtide/flake-utils";
@@ -68,9 +68,9 @@
               -I./include -D_FILE_OFFSET_BITS=64 -DGIT_COMMIT='"${git-commit}"' \
               -lfuse -lsquashfuse_ll -lzstd -lz -llzma -llz4 -llzo2 \
               -T ${appimage-runtime}/src/data_sections.ld
-            printf "AI2" > magic_bytes
 
             # Add AppImage Type 2 Magic Bytes to runtime
+            printf "AI2" > magic_bytes
             dd if=magic_bytes of=$out bs=1 count=3 seek=8 conv=notrunc status=none
           '';
 
