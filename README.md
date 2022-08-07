@@ -19,30 +19,22 @@ $ ./hello-2.12.1-x86_64.AppImage
 Hello, world!
 ```
 
-## Caveats
+### Caveats
 
 - The produced file isn't a fully conforming AppImage.
 For example, it's missing the relevant .desktop file and icons.
 Please open an issue if this is something you want.
-
 - This requires Linux User Namespaces (i.e. `CAP_SYS_USER_NS`), which should be available since Linux 3.8.
-
 - Plain files in the root directory aren't visible to the bundled app.
 
-## How it works
-
-This uses [AppImageCrafers/appimage-runtime](https://github.com/AppImageCrafters/appimage-runtime) as the runtime instead of the default, which allows us to use musl instead of glibc and produce a fully static binary.
-This launches our own AppRun, which creates a user namespaces and mounts the bundled /nix directory into the appropriate place, and launches the entrypoint symlink.
-
-<!-- TODO more information here -->
-
-## References
+### How it works / Comparison with nix-bundle
 
 This project wouldn't be possible without the groundwork already laid out in [nix-bundle](https://github.com/matthewbauer/nix-bundle), and a lot here is inspired by what's done there.
 
-If you want more related reading material, see:
+The main benefit over nix-bundle's default arx format is that we don't need to unpack the files every time we start up.
+This significantly speeds up startup to the point that it's practically instant.
 
-- [AppImage type 2 spec](https://github.com/AppImage/AppImageSpec/blob/ce1910e6443357e3406a40d458f78ba3f34293b8/draft.md#target-systems)
-- https://github.com/AppImage/AppImageKit/issues/877
-- https://github.com/matthewbauer/nix-bundle/pull/76
-- https://github.com/NixOS/bundlers/pull/1
+Thanks to using [AppImageCrafers/appimage-runtime](https://github.com/AppImageCrafters/appimage-runtime), the produced bundle doesn't depend on glibc, avoiding the [issue described here](https://github.com/AppImage/AppImageKit/issues/877) and meaning it should be portable to more system.
+Since the AppImage format itself (specifically [type 2 images](https://github.com/AppImage/AppImageSpec/blob/ce1910e6443357e3406a40d458f78ba3f34293b8/draft.md#type-2-image-format)) is essentially just the runtime binary concatenated with a squashfs file system, we also avoid unnecessary copies in the build step.
+
+We do something similar to `nix-user-chroot`, but instead only mount in the `/nix` directory before running the entrypoint symlink.
