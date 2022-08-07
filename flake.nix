@@ -9,6 +9,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    flake-compat = {
+      url = "github:edolstra/flake-compat";
+      flake = false;
+    };
+
     appimage-runtime = {
       url = "github:AppImageCrafters/appimage-runtime";
       flake = false;
@@ -20,7 +25,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, appimage-runtime, squashfuse }:
+  outputs = { self, nixpkgs, flake-utils, ... }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = (import nixpkgs {
@@ -30,7 +35,7 @@
         # nixpkgs has an old version so we need to package our own
         own-squashfuse = pkgs.stdenv.mkDerivation {
           name = "squashfuse";
-          src = squashfuse;
+          src = inputs.squashfuse;
           nativeBuildInputs = with pkgs; [ autoreconfHook libtool pkg-config ];
           buildInputs = with pkgs; [ lz4 xz zlib lzo zstd fuse ];
         };
@@ -62,12 +67,12 @@
             # extra includes to make things work
             mkdir -p include/squashfuse
             echo "#include_next <squashfuse/squashfuse.h>" > include/squashfuse/squashfuse.h
-            cp ${squashfuse}/fuseprivate.h -t include/squashfuse
+            cp ${inputs.squashfuse}/fuseprivate.h -t include/squashfuse
 
-            $CC ${appimage-runtime}/src/main.c -o $out \
+            $CC ${inputs.appimage-runtime}/src/main.c -o $out \
               -I./include -D_FILE_OFFSET_BITS=64 -DGIT_COMMIT='"${git-commit}"' \
               -lfuse -lsquashfuse_ll -lzstd -lz -llzma -llz4 -llzo2 \
-              -T ${appimage-runtime}/src/data_sections.ld
+              -T ${inputs.appimage-runtime}/src/data_sections.ld
 
             # Add AppImage Type 2 Magic Bytes to runtime
             printf "AI2" > magic_bytes
