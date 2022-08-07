@@ -106,13 +106,24 @@
             chmod 755 $out
           '';
 
-        bundlers.toAppImage =
+        bundlers.default =
           let
             basename = p: pkgs.lib.lists.last (builtins.split "/" p);
 
+            mainProgram = drv:
+              if drv?meta && drv.meta?mainProgram then drv.meta.mainProgram
+              else (builtins.parseDrvName (builtins.unsafeDiscardStringContext drv.name)).name;
+
             program = drv:
-              assert pkgs.lib.assertMsg (drv?meta && drv.meta?mainProgram) "don't know main program for derivation '${drv}'";
-              "${drv}/bin/${drv.meta.mainProgram}";
+              let
+                # use same auto-detect that <https://github.com/NixOS/bundlers> uses
+                main =
+                  if drv?meta && drv.meta?mainProgram then drv.meta.mainProgram
+                  else (builtins.parseDrvName (builtins.unsafeDiscardStringContext drv.name)).name;
+                mainPath = "${drv}/bin/${main}";
+              in
+              assert pkgs.lib.assertMsg (builtins.pathExists mainPath) "main program ${mainPath} does not exist";
+              mainPath;
 
             handler = {
               app = drv: mkappimage {
@@ -122,7 +133,6 @@
               };
               derivation = drv: mkappimage {
                 drv = drv;
-                # TODO figure this out from drv.meta.mainProgram or something
                 entrypoint = program drv;
                 name = drv.name;
               };
