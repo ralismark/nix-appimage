@@ -12,7 +12,16 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
+
+/* Exit status to use when launching an AppImage fails.
+ * For applications that assign meanings to exit status codes (e.g. rsync),
+ * we avoid "cluttering" pre-defined exit status codes by using 127 which
+ * is known to alias an application exit status and also known as launcher
+ * error, see SYSTEM(3POSIX).
+ */
+#define EXIT_EXECERROR 127
 
 static const char* argv0;
 
@@ -33,14 +42,14 @@ int mount_bind(const char* inbase, const char* outbase, const char* rel)
 	// check the thing we're mounting exists
 	struct stat statbuf;
 	if (stat(in_buf, &statbuf) < 0) {
-		fprintf(stderr, "cannot stat %s: %s\n", in_buf, strerror(errno));
+		fprintf(stderr, "%s: cannot stat %s: %s\n", argv0, in_buf, strerror(errno));
 		return 1;
 	}
 
 	// TODO mount files/symlinks?
 	if (statbuf.st_mode & S_IFDIR) {
 		if (mkdir(out_buf, statbuf.st_mode & ~S_IFMT) < 0 && errno != EEXIST) {
-			fprintf(stderr, "cannot mkdir %s: %d %s\n", out_buf, errno, strerror(errno));
+			fprintf(stderr, "%s: cannot mkdir %s: %s\n", argv0, out_buf, strerror(errno));
 			return 1;
 		}
 	} else {
@@ -48,7 +57,7 @@ int mount_bind(const char* inbase, const char* outbase, const char* rel)
 	}
 
 	if (mount(in_buf, out_buf, "none", MS_BIND | MS_REC, NULL) < 0) {
-		fprintf(stderr, "%s: mount %s -> %s: %s\n", argv0, in_buf, out_buf, strerror(errno));
+		fprintf(stderr, "%s: cannot mount %s -> %s: %s\n", argv0, in_buf, out_buf, strerror(errno));
 		return 1;
 	}
 
@@ -98,14 +107,15 @@ int main(int argc, char** argv)
 
 	// create new user ns so we can mount() in userland
 	if (unshare(CLONE_NEWUSER | CLONE_NEWNS) < 0) {
-		fprintf(stderr, "%s: unshare: %s\n", argv[0], strerror(errno));
-		return 1;
+		fprintf(stderr, "%s: cannot unshare: %s\n", argv0, strerror(errno));
+		return EXIT_EXECERROR;
 	}
 
 	// make new mountpoint
 	char mountroot[] = "/tmp/appimage-root-XXXXXX";
 	if (!mkdtemp(mountroot)) {
-		fprintf(stderr, "%s: could not make mountroot %s: %s\n", argv[0], mountroot, strerror(errno));
+		fprintf(stderr, "%s: cannot make mountroot %s: %s\n", argv0, mountroot, strerror(errno));
+		return EXIT_EXECERROR;
 	}
 
 	// Mounts --------------------------------------------------------------------
@@ -119,7 +129,7 @@ int main(int argc, char** argv)
 		}
 
 		if (mount_bind("/", mountroot, rootentry->d_name)) {
-			return 1;
+			return EXIT_EXECERROR;
 		}
 	}
 	closedir(rootfs);
@@ -128,12 +138,12 @@ int main(int argc, char** argv)
 	char appdir_buf[PATH_MAX];
 	char* appdir = dirname(realpath("/proc/self/exe", appdir_buf));
 	if (!appdir) {
-		fprintf(stderr, "%s: could not access /proc/self/exe: %s\n", argv[0], strerror(errno));
-		return 1;
+		fprintf(stderr, "%s: cannot access /proc/self/exe: %s\n", argv0, strerror(errno));
+		return EXIT_EXECERROR;
 	}
 
 	if (mount_bind(appdir, mountroot, "nix")) {
-		return 1;
+		return EXIT_EXECERROR;
 	}
 
 	// Chroot --------------------------------------------------------------------
@@ -144,28 +154,46 @@ int main(int argc, char** argv)
 	// save where we were so we can cd into it
 	char cwd_buf[PATH_MAX];
 	if (!getcwd(cwd_buf, PATH_MAX)) {
-		fprintf(stderr, "%s: getcwd: %s\n", argv[0], strerror(errno));
-		return 1;
+		fprintf(stderr, "%s: cannot getcwd: %s\n", argv0, strerror(errno));
+		return EXIT_EXECERROR;
 	}
 
-	// chroot
-	if (chroot(mountroot) < 0) {
-		fprintf(stderr, "%s: chroot %s: %s\n", argv[0], mountroot, strerror(errno));
-		return 1;
+	int pid = fork();
+	if (pid < 0) {
+		fprintf(stderr, "%s: cannot fork: %s\n", argv0, strerror(errno));
+		return EXIT_EXECERROR;
+	} else if (pid == 0) {
+		// child
+
+		// chroot
+		if (chroot(mountroot) < 0) {
+			fprintf(stderr, "%s: cannot chroot %s: %s\n", argv0, mountroot, strerror(errno));
+			return EXIT_EXECERROR;
+		}
+
+		if (chdir(cwd_buf) < 0) {
+			fprintf(stderr, "%s: cannot chdir %s: %s\n", argv0, cwd_buf, strerror(errno));
+			return EXIT_EXECERROR;
+		}
+
+		char exec_buf[PATH_MAX];
+		if (snprintf(exec_buf, PATH_MAX, "%s/entrypoint", appdir) >= PATH_MAX) {
+			fprintf(stderr, "%s: path too long: %s/entrypoint\n", argv0, appdir);
+			return EXIT_EXECERROR;
+		}
+
+		execv(exec_buf, argv);
+		fprintf(stderr, "%s: could not exec %s: %s\n", argv0, exec_buf, strerror(errno));
+		return EXIT_EXECERROR;
+	} else {
+		// parent
+		int status = 0;
+		int rv = waitpid(pid, &status, 0);
+		status = rv > 0 && WIFEXITED (status) ? WEXITSTATUS (status) : EXIT_EXECERROR;
+
+		// TODO cleanup
+
+		return status;
 	}
 
-	if (chdir(cwd_buf) < 0) {
-		fprintf(stderr, "%s: chdir %s: %s", argv[0], cwd_buf, strerror(errno));
-		return 1;
-	}
-
-	char exec_buf[PATH_MAX];
-	if (snprintf(exec_buf, PATH_MAX, "%s/entrypoint", appdir) >= PATH_MAX) {
-		fprintf(stderr, "%s: path too long: %s/entrypoint", argv[0], appdir);
-		return 1;
-	}
-
-	execv(exec_buf, argv);
-	fprintf(stderr, "%s: could not exec %s: %s\n", argv[0], exec_buf, strerror(errno));
-	return 1;
 }
