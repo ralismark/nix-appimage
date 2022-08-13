@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <sched.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,44 +25,50 @@
 #define EXIT_EXECERROR 127
 
 static const char* argv0;
+static char mountroot[] = "/tmp/appimage-root-XXXXXX";
 
-int mount_bind(const char* inbase, const char* outbase, const char* rel)
+static void die_if(bool cond, const char* fmt, ...)
 {
-	char in_buf[PATH_MAX];
-	if (snprintf(in_buf, PATH_MAX, "%s/%s", inbase, rel) >= PATH_MAX) {
-		fprintf(stderr, "%s: path too long: %s/%s", argv0, inbase, rel);
-		return 1;
+	if (cond) {
+		fprintf(stderr, "%s: ", argv0);
+		va_list args;
+		va_start(args, fmt);
+		vfprintf(stderr, fmt, args);
+		va_end(args);
+		fprintf(stderr, ": %s\n", strerror(errno));
+		exit(EXIT_EXECERROR);
+	}
+}
+
+const char* strprintf(const char* fmt, ...)
+{
+	va_list args1;
+	va_start(args1, fmt);
+	va_list args2;
+	va_copy(args2, args1);
+
+	int len = vsnprintf(NULL, 0, fmt, args1);
+	if (len < 0) {
+		fprintf(stderr, "%s: vsnprintf '%s' failed\n", argv0, fmt);
+		exit(EXIT_EXECERROR);
 	}
 
-	char out_buf[PATH_MAX];
-	if (snprintf(out_buf, PATH_MAX, "%s/%s", outbase, rel) >= PATH_MAX) {
-		fprintf(stderr, "%s: path too long: %s/%s", argv0, outbase, rel);
-		return 1;
+	char* buf = malloc(len + 1);
+	if (!buf) {
+		fprintf(stderr, "%s: malloc %d\n", argv0, len + 1);
+		exit(EXIT_EXECERROR);
 	}
 
-	// check the thing we're mounting exists
-	struct stat statbuf;
-	if (stat(in_buf, &statbuf) < 0) {
-		fprintf(stderr, "%s: cannot stat %s: %s\n", argv0, in_buf, strerror(errno));
-		return 1;
+	va_end(args1);
+
+	if (vsnprintf(buf, len + 1, fmt, args2) != len) {
+		fprintf(stderr, "%s: vsnprintf '%s' returned unexpected length\n", argv0, fmt);
+		exit(EXIT_EXECERROR);
 	}
 
-	// TODO mount files/symlinks?
-	if (statbuf.st_mode & S_IFDIR) {
-		if (mkdir(out_buf, statbuf.st_mode & ~S_IFMT) < 0 && errno != EEXIST) {
-			fprintf(stderr, "%s: cannot mkdir %s: %s\n", argv0, out_buf, strerror(errno));
-			return 1;
-		}
-	} else {
-		return 0; // TODO
-	}
+	va_end(args2);
 
-	if (mount(in_buf, out_buf, "none", MS_BIND | MS_REC, NULL) < 0) {
-		fprintf(stderr, "%s: cannot mount %s -> %s: %s\n", argv0, in_buf, out_buf, strerror(errno));
-		return 1;
-	}
-
-	return 0;
+	return buf;
 }
 
 static int write_to(const char* path, const char* fmt, ...)
@@ -70,7 +77,11 @@ static int write_to(const char* path, const char* fmt, ...)
 	if (fd > 0) {
 		va_list args;
 		va_start(args, fmt);
-		vdprintf(fd, fmt, args);
+		if (vdprintf(fd, fmt, args) < 0) {
+			va_end(args);
+			close(fd);
+			return 1;
+		}
 		va_end(args);
 		close(fd);
 		return 0;
@@ -78,122 +89,121 @@ static int write_to(const char* path, const char* fmt, ...)
 	return 1;
 }
 
-static int update_uid_gid(uid_t uid, gid_t gid)
+void child_main(char** argv, int w)
 {
-	// fixes issue #1 where writing to /proc/self/gid_map fails
-	// see user_namespaces(7) for more documentation
-	write_to("deny", "/proc/self/setgroups");
+	close(w);
 
-	// map the original uid/gid in the new ns
-	if (write_to("/proc/self/uid_map", "%d %d 1", uid, uid)) {
-		fprintf(stderr, "%s: /proc/self/uid_map: %s'\n", argv0, strerror(errno));
-		return 1;
-	}
-	if (write_to("/proc/self/gid_map", "%d %d 1", gid, gid)) {
-		fprintf(stderr, "%s: /proc/self/gid_map: %s'\n", argv0, strerror(errno));
-		return 1;
-	}
-
-	return 0;
-}
-
-int main(int argc, char** argv)
-{
-	argv0 = argv[0];
+	// get location of exe
+	char appdir_buf[PATH_MAX];
+	char* appdir = dirname(realpath("/proc/self/exe", appdir_buf));
+	die_if(!appdir, "cannot access /proc/self/exe");
 
 	// get uid, gid before going to new namespace
 	uid_t uid = getuid();
 	gid_t gid = getgid();
 
 	// create new user ns so we can mount() in userland
-	if (unshare(CLONE_NEWUSER | CLONE_NEWNS) < 0) {
-		fprintf(stderr, "%s: cannot unshare: %s\n", argv0, strerror(errno));
-		return EXIT_EXECERROR;
-	}
+	die_if(unshare(CLONE_NEWUSER | CLONE_NEWNS) < 0, "cannot unshare");
 
-	// make new mountpoint
-	char mountroot[] = "/tmp/appimage-root-XXXXXX";
-	if (!mkdtemp(mountroot)) {
-		fprintf(stderr, "%s: cannot make mountroot %s: %s\n", argv0, mountroot, strerror(errno));
-		return EXIT_EXECERROR;
-	}
+	// UID/GID Mapping -----------------------------------------------------------
 
-	// Mounts --------------------------------------------------------------------
+	// see user_namespaces(7)
+	// > The data written to uid_map (gid_map) must consist of a single line that
+	// > maps the writing process's effective user ID (group ID) in the parent
+	// > user namespace to a user ID (group ID) in the user namespace.
+	die_if(write_to("/proc/self/uid_map", "%d %d 1\n", uid, uid), "cannot write uid_map");
 
-	// copy root filesystem
-	DIR* rootfs = opendir("/");
+	// see user_namespaces(7):
+	// > In the case of gid_map, use of the setgroups(2) system call must first
+	// > be denied by writing "deny" to the /proc/[pid]/setgroups file (see
+	// > below) before writing to gid_map.
+	die_if(write_to("/proc/self/setgroups", "deny"), "cannot write setgroups");
+	die_if(write_to("/proc/self/gid_map", "%d %d 1\n", uid, gid), "cannot write gid_map");
+
+	// Mountpoint ----------------------------------------------------------------
+
+	// tmpfs so we don't need to cleanup
+	die_if(mount("tmpfs", mountroot, "tmpfs", 0, 0) < 0, "mount tmpfs -> %s", mountroot);
+
+	// copy over root directories
+	DIR* rootdir = opendir("/");
 	struct dirent* rootentry;
-	while ((rootentry = readdir(rootfs))) {
-		if (strcmp(rootentry->d_name, ".") == 0 || strcmp(rootentry->d_name, "..") == 0) {
+	while ((rootentry = readdir(rootdir))) {
+		// ignore . and .. and nix
+		if (strcmp(rootentry->d_name, ".") == 0
+			|| strcmp(rootentry->d_name, "..") == 0
+			|| strcmp(rootentry->d_name, "nix") == 0) {
 			continue;
 		}
 
-		if (mount_bind("/", mountroot, rootentry->d_name)) {
-			return EXIT_EXECERROR;
-		}
-	}
-	closedir(rootfs);
+		const char* from = strprintf("/%s", rootentry->d_name);
+		const char* to = strprintf("%s/%s", mountroot, rootentry->d_name);
 
-	// mount in nix
-	char appdir_buf[PATH_MAX];
-	char* appdir = dirname(realpath("/proc/self/exe", appdir_buf));
-	if (!appdir) {
-		fprintf(stderr, "%s: cannot access /proc/self/exe: %s\n", argv0, strerror(errno));
-		return EXIT_EXECERROR;
+		die_if(mkdir(to, 0777) < 0, "mkdir %s", to);
+		die_if(mount(from, to, "none", MS_BIND | MS_REC, 0) < 0, "mount %s -> %s", from, to);
+
+		free((void*) from);
+		free((void*) to);
 	}
 
-	if (mount_bind(appdir, mountroot, "nix")) {
-		return EXIT_EXECERROR;
-	}
+	// mount in /nix
+	const char* nix_from = strprintf("%s/nix", appdir);
+	const char* nix_to = strprintf("%s/nix", mountroot);
+
+	die_if(mkdir(nix_to, 0777) < 0, "mkdir %s", nix_to);
+	die_if(mount(nix_from, nix_to, "none", MS_BIND | MS_REC, 0) < 0, "mount %s -> %s", nix_from, nix_to);
+
+	free((void*) nix_from);
+	free((void*) nix_to);
 
 	// Chroot --------------------------------------------------------------------
 
-	// map uid/gid
-	update_uid_gid(uid, gid);
-
 	// save where we were so we can cd into it
-	char cwd_buf[PATH_MAX];
-	if (!getcwd(cwd_buf, PATH_MAX)) {
-		fprintf(stderr, "%s: cannot getcwd: %s\n", argv0, strerror(errno));
-		return EXIT_EXECERROR;
-	}
+	char cwd[PATH_MAX];
+	die_if(!getcwd(cwd, PATH_MAX), "cannot getcwd");
+
+	// chroot
+	die_if(chroot(mountroot) < 0, "cannot chroot %s", mountroot);
+
+	// cd back again
+	die_if(chdir(cwd) < 0, "cannot chdir %s", cwd);;
+
+	// Exec ----------------------------------------------------------------------
+
+	const char* exe = strprintf("%s/entrypoint", appdir);
+	execv(exe, argv);
+	die_if(true, "cannot exec %s", exe);
+}
+
+int main(int argc, char** argv)
+{
+	argv0 = argv[0];
+
+	// make new mountpoint
+	die_if(!mkdtemp(mountroot), "mkdtemp %s", mountroot);
+
+	int pipefd[2];
+	die_if(pipe(pipefd) < 0, "cannot make pipe");
+
+	int w = pipefd[1];
+	int r = pipefd[0];
 
 	int pid = fork();
-	if (pid < 0) {
-		fprintf(stderr, "%s: cannot fork: %s\n", argv0, strerror(errno));
-		return EXIT_EXECERROR;
-	} else if (pid == 0) {
+	die_if(pid < 0, "cannot fork");
+	if (pid == 0) {
 		// child
-
-		// chroot
-		if (chroot(mountroot) < 0) {
-			fprintf(stderr, "%s: cannot chroot %s: %s\n", argv0, mountroot, strerror(errno));
-			return EXIT_EXECERROR;
-		}
-
-		if (chdir(cwd_buf) < 0) {
-			fprintf(stderr, "%s: cannot chdir %s: %s\n", argv0, cwd_buf, strerror(errno));
-			return EXIT_EXECERROR;
-		}
-
-		char exec_buf[PATH_MAX];
-		if (snprintf(exec_buf, PATH_MAX, "%s/entrypoint", appdir) >= PATH_MAX) {
-			fprintf(stderr, "%s: path too long: %s/entrypoint\n", argv0, appdir);
-			return EXIT_EXECERROR;
-		}
-
-		execv(exec_buf, argv);
-		fprintf(stderr, "%s: could not exec %s: %s\n", argv0, exec_buf, strerror(errno));
-		return EXIT_EXECERROR;
+		child_main(argv, w);
 	} else {
+		char c;
+		die_if(read(r, &c, 1) < 0, "parent read");
+
 		// parent
 		int status = 0;
 		int rv = waitpid(pid, &status, 0);
 		status = rv > 0 && WIFEXITED (status) ? WEXITSTATUS (status) : EXIT_EXECERROR;
 
-		// TODO cleanup
+		rmdir(mountroot);
 
 		return status;
 	}
-
 }

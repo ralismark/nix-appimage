@@ -42,7 +42,7 @@
       in
       rec {
         packages.apprun = pkgs.runCommandCC "AppRun" { } ''
-          $CC ${./apprun.c} -o $out
+          $CC ${./apprun.c} -Werror -o $out
         '';
 
         packages.runtime =
