@@ -121,13 +121,20 @@
 
             program = drv:
               let
-                # use same auto-detect that <https://github.com/NixOS/bundlers> uses
+                # Use same auto-detect that <https://github.com/NixOS/bundlers>
+                # uses. This isn't 100% accurate and might pick the wrong name
+                # (e.g. nixpkgs#mesa-demos), so we do an additional check to
+                # make sure the target exists
                 main =
                   if drv?meta && drv.meta?mainProgram then drv.meta.mainProgram
                   else (builtins.parseDrvName (builtins.unsafeDiscardStringContext drv.name)).name;
                 mainPath = "${drv}/bin/${main}";
+
+                # builtins.pathExists mainPath doesn't work consistently (e.g.
+                # for symlinks), but this does
+                mainPathExists = builtins.hasAttr main (builtins.readDir "${drv}/bin");
               in
-              assert pkgs.lib.assertMsg (builtins.pathExists mainPath) "main program ${mainPath} does not exist";
+              assert pkgs.lib.assertMsg mainPathExists "main program ${mainPath} does not exist";
               mainPath;
 
             handler = {
