@@ -133,8 +133,33 @@ void child_main(char** argv)
 		const char* from = strprintf("/%s", rootentry->d_name);
 		const char* to = strprintf("%s/%s", mountroot, rootentry->d_name);
 
-		die_if(mkdir(to, 0777) < 0, "mkdir %s", to);
-		die_if(mount(from, to, "none", MS_BIND | MS_REC, 0) < 0, "mount %s -> %s", from, to);
+		// we don't treat failure of the below bind as an actual failure, since
+		// our logic not robust enough to handle weird filesystem scenarios
+
+		// TODO imitate symlinks as symlinks
+
+		struct stat statbuf;
+		if (stat(from, &statbuf) < 0) {
+			fprintf(stderr, "%s: stat %s: %s\n", argv0, from, strerror(errno));
+		} else {
+			if (S_ISDIR(statbuf.st_mode)) {
+				die_if(mkdir(to, statbuf.st_mode & ~S_IFMT) < 0, "mkdir %s", to);
+				if (mount(from, to, "none", MS_BIND | MS_REC, 0) < 0) {
+					fprintf(stderr, "%s: mount %s -> %s: %s\n", argv0, from, to, strerror(errno));
+				}
+			} else {
+				// effectively touch
+				int fd = creat(to, statbuf.st_mode & ~S_IFMT);
+				if (fd == -1) {
+					fprintf(stderr, "%s: creat %s: %s\n", argv0, to, strerror(errno));
+				} else {
+					close(fd);
+					if (mount(from, to, "none", MS_BIND | MS_REC, 0) < 0) {
+						fprintf(stderr, "%s: mount %s -> %s: %s\n", argv0, from, to, strerror(errno));
+					}
+				}
+			}
+		}
 
 		free((void*) from);
 		free((void*) to);
