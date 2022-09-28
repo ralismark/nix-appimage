@@ -88,6 +88,7 @@
             extras = [
               "AppRun f 555 0 0 cat ${packages.apprun}"
               "entrypoint s 555 0 0 ${entrypoint}"
+              "mountroot d 777 0 0" # TODO permissions?
             ];
             extra-args = pkgs.lib.concatMapStrings (x: " -p \"${x}\"") extras;
           in

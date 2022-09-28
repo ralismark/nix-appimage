@@ -25,7 +25,8 @@
 #define EXIT_EXECERROR 127
 
 static const char* argv0;
-static char mountroot[] = "/tmp/appimage-root-XXXXXX";
+static const char* appdir;
+static const char* mountroot;
 
 static void die_if(bool cond, const char* fmt, ...)
 {
@@ -89,15 +90,8 @@ static int write_to(const char* path, const char* fmt, ...)
 	return 1;
 }
 
-void child_main(char** argv, int w)
+void child_main(char** argv)
 {
-	close(w);
-
-	// get location of exe
-	char appdir_buf[PATH_MAX];
-	char* appdir = dirname(realpath("/proc/self/exe", appdir_buf));
-	die_if(!appdir, "cannot access /proc/self/exe");
-
 	// get uid, gid before going to new namespace
 	uid_t uid = getuid();
 	gid_t gid = getgid();
@@ -179,31 +173,15 @@ int main(int argc, char** argv)
 {
 	argv0 = argv[0];
 
-	// make new mountpoint
-	die_if(!mkdtemp(mountroot), "mkdtemp %s", mountroot);
+	// get location of exe
+	char appdir_buf[PATH_MAX];
+	appdir = dirname(realpath("/proc/self/exe", appdir_buf));
+	die_if(!appdir, "cannot access /proc/self/exe");
 
-	int pipefd[2];
-	die_if(pipe(pipefd) < 0, "cannot make pipe");
+	// use <appdir>/mountpoint as alternate root. Since this already exists
+	// inside the squashfs, we don't need to remove this dir later (which we
+	// would have had to do if using mktemp)!
+	mountroot = strprintf("%s/mountroot", appdir);
 
-	int w = pipefd[1];
-	int r = pipefd[0];
-
-	int pid = fork();
-	die_if(pid < 0, "cannot fork");
-	if (pid == 0) {
-		// child
-		child_main(argv, w);
-	} else {
-		char c;
-		die_if(read(r, &c, 1) < 0, "parent read");
-
-		// parent
-		int status = 0;
-		int rv = waitpid(pid, &status, 0);
-		status = rv > 0 && WIFEXITED (status) ? WEXITSTATUS (status) : EXIT_EXECERROR;
-
-		rmdir(mountroot);
-
-		return status;
-	}
+	child_main(argv);
 }
