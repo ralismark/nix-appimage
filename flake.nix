@@ -71,7 +71,7 @@
               -T ${inputs.appimage-runtime}/src/data_sections.ld
 
             # Add AppImage Type 2 Magic Bytes to runtime
-            printf "AI2" > magic_bytes
+            printf %b '\x41\x49\x02' > magic_bytes
             dd if=magic_bytes of=$out bs=1 count=3 seek=8 conv=notrunc status=none
           '';
 
