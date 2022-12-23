@@ -22,10 +22,14 @@ Hello, world!
 ### Caveats
 
 - The produced file isn't a fully conforming AppImage.
-For example, it's missing the relevant .desktop file and icons.
+For example, it's missing the relevant .desktop file and icons -- this doesn't affect the running of bundled apps in any way, but might cause issues with showing up correctly in application launchers (e.g. rofi).
 Please open an issue if this is something you want.
-- This requires Linux User Namespaces (i.e. `CAP_SYS_USER_NS`), which should be available since Linux 3.8.
+- This requires Linux User Namespaces (i.e. `CAP_SYS_USER_NS`), which are available since Linux 3.8 (released in 2013).
 - Plain files in the root directory aren't visible to the bundled app.
+
+### OpenGL
+
+Addressing issues with running OpenGL apps on non-NixOS systems is also *out of scope* for this project -- you'll still have to use e.g. [nixGL](https://github.com/guibou/nixGL) to make those graphical programs work without NixOS.
 
 ### How it works / Comparison with nix-bundle
 
