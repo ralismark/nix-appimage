@@ -19,6 +19,14 @@ $ ./hello-2.12.1-x86_64.AppImage
 Hello, world!
 ```
 
+If you get a `main program ... does not exist` error, or want to specify a different binary to run, you can instead use the `./bundle` script:
+
+```
+$ ./bundle dnsutils /bin/dig # or ./bundle dnsutils dig
+$ ./dig-x86_64.AppImage -v
+DiG 9.18.14
+```
+
 ### Caveats
 
 - The produced file isn't a fully conforming AppImage.
