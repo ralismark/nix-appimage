@@ -185,11 +185,17 @@ void child_main(char** argv)
 	die_if(chroot(mountroot) < 0, "cannot chroot %s", mountroot);
 
 	// cd back again
-	die_if(chdir(cwd) < 0, "cannot chdir %s", cwd);;
+	die_if(chdir(cwd) < 0, "cannot chdir %s", cwd);
 
 	// Exec ----------------------------------------------------------------------
 
-	const char* exe = strprintf("%s/entrypoint", appdir);
+	// For better error messages, we wanna get what entrypoint points to
+	const char* entrypoint = strprintf("%s/entrypoint", appdir);
+	char exe[PATH_MAX + 1];
+	ssize_t exe_size = readlink(entrypoint, exe, PATH_MAX);
+	die_if(exe_size < 0, "cannot read link %s", entrypoint);
+	exe[exe_size] = 0;
+
 	execv(exe, argv);
 	die_if(true, "cannot exec %s", exe);
 }
