@@ -126,6 +126,8 @@ void child_main(char** argv)
 
 	// tmpfs so we don't need to cleanup
 	die_if(mount("tmpfs", mountroot, "tmpfs", 0, 0) < 0, "mount tmpfs -> %s", mountroot);
+	// mount private to not propagate mount events
+	die_if(mount(mountroot, mountroot, "none", MS_PRIVATE, 0) < 0, "mount tmpfs bind -> %s", mountroot);
 
 	// copy over root directories
 	DIR* rootdir = opendir("/");
