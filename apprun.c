@@ -96,28 +96,38 @@ void child_main(char** argv)
 	uid_t uid = getuid();
 	gid_t gid = getgid();
 
-	// create new user ns so we can mount() in userland
-	die_if(unshare(CLONE_NEWUSER | CLONE_NEWNS) < 0, "cannot unshare");
+	int clonens = CLONE_NEWNS;
+	if (uid != 0) {
+		// create new user ns so we can mount() in userland
+		clonens |= CLONE_NEWUSER;
+	}
 
-	// UID/GID Mapping -----------------------------------------------------------
+	// Create new mount namespace (and potentially user namespace if not root)
+	die_if(unshare(clonens) < 0, "cannot unshare");
 
-	// see user_namespaces(7)
-	// > The data written to uid_map (gid_map) must consist of a single line that
-	// > maps the writing process's effective user ID (group ID) in the parent
-	// > user namespace to a user ID (group ID) in the user namespace.
-	die_if(write_to("/proc/self/uid_map", "%d %d 1\n", uid, uid), "cannot write uid_map");
+	if (uid != 0) {
+		// UID/GID Mapping -----------------------------------------------------------
 
-	// see user_namespaces(7):
-	// > In the case of gid_map, use of the setgroups(2) system call must first
-	// > be denied by writing "deny" to the /proc/[pid]/setgroups file (see
-	// > below) before writing to gid_map.
-	die_if(write_to("/proc/self/setgroups", "deny"), "cannot write setgroups");
-	die_if(write_to("/proc/self/gid_map", "%d %d 1\n", uid, gid), "cannot write gid_map");
+		// see user_namespaces(7)
+		// > The data written to uid_map (gid_map) must consist of a single line that
+		// > maps the writing process's effective user ID (group ID) in the parent
+		// > user namespace to a user ID (group ID) in the user namespace.
+		die_if(write_to("/proc/self/uid_map", "%d %d 1\n", uid, uid), "cannot write uid_map");
+
+		// see user_namespaces(7):
+		// > In the case of gid_map, use of the setgroups(2) system call must first
+		// > be denied by writing "deny" to the /proc/[pid]/setgroups file (see
+		// > below) before writing to gid_map.
+		die_if(write_to("/proc/self/setgroups", "deny"), "cannot write setgroups");
+		die_if(write_to("/proc/self/gid_map", "%d %d 1\n", uid, gid), "cannot write gid_map");
+	}
 
 	// Mountpoint ----------------------------------------------------------------
 
 	// tmpfs so we don't need to cleanup
 	die_if(mount("tmpfs", mountroot, "tmpfs", 0, 0) < 0, "mount tmpfs -> %s", mountroot);
+	// make unbindable to both prevent event propagation as well as mount explosion
+	die_if(mount(mountroot, mountroot, "none", MS_UNBINDABLE, 0) < 0, "mount tmpfs bind -> %s", mountroot);
 
 	// copy over root directories
 	DIR* rootdir = opendir("/");
