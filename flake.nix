@@ -95,12 +95,7 @@
               "mountroot d 777 0 0" # TODO permissions?
             ];
             extra-args = pkgs.lib.concatMapStrings (x: " -p \"${x}\"") extras;
-            exclude-args =
-              let
-                exclude-prefix = pkgs.lib.lists.optional (exclude != []) " -wildcards -e";
-                exclude-entries = map (x: " \"${x}\"") exclude;
-              in
-                pkgs.lib.strings.concatStrings (exclude-prefix ++ exclude-entries);
+            exclude-args = pkgs.lib.optional (exclude != []) " -wildcards -e ${pkgs.lib.escapeShellArgs exclude}";
           in
           pkgs.runCommand "${name}-${arch}.AppImage"
             {
