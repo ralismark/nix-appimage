@@ -81,7 +81,11 @@
         # with a squashfs. When running the AppImage, the squashfs binary is
         # extracted/mounted at an arbitrary place and the AppRun binary within
         # run.
-        mkappimage = { drv, entrypoint, name }:
+        #
+        # The `exclude` argument, if supplied, enables excluding files from the
+        # final squashfs image. Globs are supported. See `mksquashfs(1)` for for
+        # details.
+        mkappimage = { drv, entrypoint, name, exclude ? [] }:
           let
             arch = builtins.head (builtins.split "-" system);
             closure = pkgs.writeReferencesToFile drv;
@@ -91,6 +95,7 @@
               "mountroot d 777 0 0" # TODO permissions?
             ];
             extra-args = pkgs.lib.concatMapStrings (x: " -p \"${x}\"") extras;
+            exclude-args = pkgs.lib.optional (exclude != []) " -wildcards -e ${pkgs.lib.escapeShellArgs exclude}";
           in
           pkgs.runCommand "${name}-${arch}.AppImage"
             {
@@ -103,7 +108,8 @@
               -all-root \
               -noappend \
               -b 1M \
-              ${extra-args}
+              ${extra-args} \
+              ${exclude-args}
             dd if=${packages.runtime} of=$out conv=notrunc
             chmod 755 $out
           '';
