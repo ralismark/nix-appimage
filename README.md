@@ -12,41 +12,59 @@ Then, run this via the [nix bundle](https://nixos.org/manual/nix/unstable/comman
 $ nix bundle --bundler github:ralismark/nix-appimage nixpkgs#hello
 ```
 
-This produces `hello-2.12.1-x86_64.AppImage`, which prints "Hello world!" when run:
+This produces `hello.AppImage`, which prints "Hello world!" when run:
 
 ```
-$ ./hello-2.12.1-x86_64.AppImage
+$ ./hello.AppImage
 Hello, world!
 ```
 
-If you get a `main program ... does not exist` error, or want to specify a different binary to run, you can instead use the `./bundle` script:
+If you get a `entrypoint ... is not executable` error, or want to specify a different binary to run, you can instead use the `./bundle` script:
 
 ```
 $ ./bundle dnsutils /bin/dig # or ./bundle dnsutils dig
-$ ./dig-x86_64.AppImage -v
+$ ./dig.AppImage -v
 DiG 9.18.14
 ```
 
-### Caveats
+You can also use nix-appimage as a nix library -- the flake provides `lib.<system>.mkAppImage` which supports more options.
+See mkAppImage.nix for details.
 
-- The produced file isn't a fully conforming AppImage.
+## Caveats
+
+OpenGL apps not being able to run on non-NixOS systems is a **known problem**, see https://github.com/NixOS/nixpkgs/issues/9415 and https://github.com/ralismark/nix-appimage/issues/5.
+You'll need to use something like [nixGL](https://github.com/guibou/nixGL).
+Addressing this problem outright is _out of scope_ for this project, however PRs to integrate solutions (e.g. nixGL) are welcome.
+
+Additionally, the produced file isn't a _fully_ conforming AppImage.
 For example, it's missing the relevant .desktop file and icons -- this doesn't affect the running of bundled apps in any way, but might cause issues with showing up correctly in application launchers (e.g. rofi).
 Please open an issue if this is something you want.
-- This requires Linux User Namespaces (i.e. `CAP_SYS_USER_NS`), which are available since Linux 3.8 (released in 2013).
+
+The current implementation also has some limitations:
+
+- This requires Linux User Namespaces (i.e. `CAP_SYS_USER_NS`), which are available since Linux 3.8 (released in 2013), but may not be enabled for security reasons.
 - Plain files in the root directory aren't visible to the bundled app.
 
-### OpenGL
+## Under The Hood
 
-Addressing issues with running OpenGL apps on non-NixOS systems is also *out of scope* for this project -- you'll still have to use e.g. [nixGL](https://github.com/guibou/nixGL) to make those graphical programs work without NixOS.
+nix-appimage creates [type 2 AppImages](https://github.com/AppImage/AppImageSpec/blob/ce1910e6443357e3406a40d458f78ba3f34293b8/draft.md#type-2-image-format), which are essentially just a binary, known as the Runtime, concatenated with a squashfs file system.
+When the AppImage is run, the runtime simply mounts the squashfs somewhere and runs the contained `AppRun`.
+The squashfs contains all the files needed to run the program:
 
-### How it works / Comparison with nix-bundle
+- `nix/store/...`, containing the closure of the bundled program
+- `entrypoint`, a symlink to the actual executable, e.g. `/nix/store/q9cqc10sw293xpx3hca4qpsmbg7hsgzy-hello-2.12.1/bin/hello`
+- `AppRun`, which gets started after the squashfs is mounted.
+  This isn't the actual bundled executable, but a wrapper that makes the bundled nix/store file visible under /nix/store before executing `entrypoint`.
 
-This project wouldn't be possible without the groundwork already laid out in [nix-bundle](https://github.com/matthewbauer/nix-bundle), and a lot here is inspired by what's done there.
+Runtimes are included within the flake as `packages.<system>.appimage-runtimes.<name>`.
+Currently supported are:
 
-The main benefit over nix-bundle's default arx format is that we don't need to unpack the files every time we start up.
-This significantly speeds up startup to the point that it's practically instant.
+- `appimagecrafters` (default).
+  This is [AppImageCrafers/appimage-runtime](https://github.com/AppImageCrafters/appimage-runtime), which is a runtime that doesn't depend on glibc. This avoids the [issue described here](https://github.com/AppImage/AppImageKit/issues/877), meaning it should be portable to more systems.
 
-Thanks to using [AppImageCrafers/appimage-runtime](https://github.com/AppImageCrafters/appimage-runtime), the produced bundle doesn't depend on glibc, avoiding the [issue described here](https://github.com/AppImage/AppImageKit/issues/877) and meaning it should be portable to more system.
-Since the AppImage format itself (specifically [type 2 images](https://github.com/AppImage/AppImageSpec/blob/ce1910e6443357e3406a40d458f78ba3f34293b8/draft.md#type-2-image-format)) is essentially just the runtime binary concatenated with a squashfs file system, we also avoid unnecessary copies in the build step.
+AppRuns are included within the flake as `packages.<system>.appimage-appruns.<name>`.
+Currently supported are:
 
-We do something similar to `nix-user-chroot`, but instead only mount in the `/nix` directory before running the entrypoint symlink.
+- `userns-chroot` (default).
+  This uses Linux User Namespaces and chroot to make /nix/store appear to have the bundled files, similar to [nix-user-chroot](https://github.com/nix-community/nix-user-chroot).
+  There is a known problem of plain files in the root folder not being visible to the bundled app when using this AppRun.
