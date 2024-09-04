@@ -39,11 +39,13 @@
             lib.mkAppImage
               {
                 program = drv.program;
+                squashfsArgs = if drv ? squashfsArgs then drv.squashfsArgs else [];
               }
           else if drv.type == "derivation" then
             lib.mkAppImage
               {
                 program = pkgs.lib.getExe drv;
+                squashfsArgs = if drv ? squashfsArgs then drv.squashfsArgs else [];
               }
           else builtins.abort "don't know how to build ${drv.type}; only know app and derivation";
       });
