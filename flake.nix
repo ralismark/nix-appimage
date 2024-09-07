@@ -44,5 +44,21 @@
                 program = pkgs.lib.getExe drv;
               }
           else builtins.abort "don't know how to build ${drv.type}; only know app and derivation";
+
+        checks =
+          let
+            # use regular (non-static) nixpkgs
+            pkgs = import nixpkgs { inherit system; };
+            hello-appimage = bundlers.default pkgs.hello;
+          in
+          {
+            hello-is-static = pkgs.runCommand "check-hello-is-static"
+              {
+                nativeBuildInputs = [ (pkgs.lib.getBin pkgs.stdenv.cc.libc) ];
+              } ''
+              (! ldd ${hello-appimage} 2>&1) | grep "not a dynamic executable"
+              touch $out
+            '';
+          };
       });
 }
