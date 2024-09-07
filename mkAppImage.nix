@@ -1,7 +1,6 @@
 { lib
 , runCommand
 , squashfsTools
-, writeClosure
 , writeTextFile
 
   # mkappimage-specific, passed from flake.nix
@@ -25,6 +24,34 @@ let
     "-offset $(stat -L -c%s ${lib.escapeShellArg mkappimage-runtime})" # squashfs comes after the runtime
     "-all-root" # chown to root
   ] ++ squashfsArgs;
+
+  # Workaround for writeClosure bug.
+  #
+  # Due to a bug in Nix, writeClosure with a path *under* a nix store path (e.g.
+  # /nix/store/...-hello/bin/hello) raises the error "path '$program' is not in
+  # the Nix store".
+  #
+  # See: https://github.com/ralismark/nix-appimage/issues/16
+  # See: https://github.com/NixOS/nixpkgs/issues/316652
+  # See: https://github.com/NixOS/nix/pull/10549
+  #
+  # This should be fixed in the latest version of Nix, however version where
+  # this bug is present are still common, so we work around it by using the old
+  # implementation of writeReferencesToFile from
+  # https://github.com/NixOS/nixpkgs/blob/e99021ff754a204e38df619ac908ac92885636a4/pkgs/build-support/trivial-builders/default.nix#L628-L640
+  writeReferencesToFile = path: runCommand "runtime-deps"
+    {
+      exportReferencesGraph = [ "graph" path ];
+    }
+    ''
+      touch $out
+      while read path; do
+        echo $path >> $out
+        read dummy
+        read nrRefs
+        for ((i = 0; i < nrRefs; i++)); do read ref; done
+      done < graph
+    '';
 in
 runCommand name
 {
@@ -37,7 +64,7 @@ runCommand name
 
   mksquashfs ${builtins.concatStringsSep " " ([
     # first run of mksquashfs copies the nix/store closure and additional files
-    "$(cat ${writeClosure [ program ]})"
+    "$(cat ${writeReferencesToFile program})"
     "$out"
 
     # additional files
