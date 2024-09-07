@@ -17,8 +17,6 @@
         pkgs = (import nixpkgs { inherit system; }).pkgsStatic;
       in
       rec {
-        packages.nixpkgs = pkgs;
-
         # runtimes are an executable that mount the squashfs part of the appimage and start AppRun
         packages.appimage-runtimes = {
           appimagecrafters = pkgs.callPackage ./runtimes/appimagecrafters { };
