@@ -20,6 +20,7 @@
         # runtimes are an executable that mount the squashfs part of the appimage and start AppRun
         packages.appimage-runtimes = {
           appimagecrafters = pkgs.callPackage ./runtimes/appimagecrafters { };
+          appimage-type2-runtime = pkgs.callPackage ./runtimes/appimage-type2-runtime { };
         };
 
         # appruns contain an AppRun executable that does setup and launches entrypoint
@@ -28,7 +29,7 @@
         };
 
         lib.mkAppImage = pkgs.callPackage ./mkAppImage.nix {
-          mkappimage-runtime = packages.appimage-runtimes.appimagecrafters;
+          mkappimage-runtime = packages.appimage-runtimes.appimage-type2-runtime;
           mkappimage-apprun = packages.appimage-appruns.userns-chroot;
         };
 

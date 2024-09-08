@@ -59,8 +59,10 @@ The squashfs contains all the files needed to run the program:
 Runtimes are included within the flake as `packages.<system>.appimage-runtimes.<name>`.
 Currently supported are:
 
-- `appimagecrafters` (default).
-  This is [AppImageCrafers/appimage-runtime](https://github.com/AppImageCrafters/appimage-runtime), which is a runtime that doesn't depend on glibc. This avoids the [issue described here](https://github.com/AppImage/AppImageKit/issues/877), meaning it should be portable to more systems.
+- `appimage-type2-runtime` (default)
+  This is [AppImage/type2-runtime](https://github.com/AppImage/type2-runtime), a static runtime maintained by the official AppImage team.
+- `appimagecrafters`.
+  This is [AppImageCrafers/appimage-runtime](https://github.com/AppImageCrafters/appimage-runtime), a similar static runtime that was the old default for nix-appimage.
 
 AppRuns are included within the flake as `packages.<system>.appimage-appruns.<name>`.
 Currently supported are:
