@@ -5,7 +5,7 @@
 , squashfuse
 , zstd
 , zlib
-, lzma
+, xz
 , lz4
 , lzo
 }:
@@ -26,7 +26,7 @@ let
   });
 
   squashfuse' = (squashfuse.override {
-    fuse = fuse3';
+    fuse3 = fuse3';
   }).overrideAttrs (old: {
     postInstall = (old.postInstall or "") + ''
       cp *.h -t $out/include/squashfuse/
@@ -45,7 +45,7 @@ stdenv.mkDerivation {
     squashfuse'
     zstd
     zlib
-    lzma
+    xz
     lz4
     lzo
   ];
