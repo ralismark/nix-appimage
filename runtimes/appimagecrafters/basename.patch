@@ -1,0 +1,15 @@
+diff --git a/src/main.c b/src/main.c
+index 82b4241..cd003bf 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -40,6 +40,7 @@ extern dev_t sqfs_makedev(int maj, int min);
+ 
+ extern int sqfs_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs);
+ 
++#include <libgen.h>
+ #include <limits.h>
+ #include <stdlib.h>
+ #include <sys/types.h>
+-- 
+2.49.0
+

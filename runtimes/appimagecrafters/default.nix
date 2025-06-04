@@ -1,7 +1,7 @@
 { fetchFromGitHub
-, fuse
+, fuse3
 , lz4
-, lzma
+, xz
 , lzo
 , pkg-config
 , squashfuse
@@ -23,21 +23,27 @@ stdenv.mkDerivation {
 
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [
-    fuse
+    fuse3
     squashfuse
     zstd
     zlib
-    lzma
+    xz
     lz4
     lzo
   ];
 
-  patchPhase = ''
+  prePatch = ''
     sed -e '/sqfs_usage/s/);/, true\0/' -i src/main.c
   '';
 
+  patches = [
+    # basename() patch from
+    # https://github.com/AppImageCrafters/appimage-runtime/pull/14/commits/23f655a9313a6b962e072f12534982b925ecb8f7
+    ./basename.patch 
+  ];
+
   configurePhase = ''
-    $PKG_CONFIG --cflags fuse > cflags
+    $PKG_CONFIG --cflags fuse3 > cflags
   '';
 
   buildPhase = ''
@@ -50,7 +56,7 @@ stdenv.mkDerivation {
       -D_FILE_OFFSET_BITS=64 -DGIT_COMMIT='"0000000"' \
       -I./include \
       $(cat cflags) \
-      -lfuse -lsquashfuse_ll -lzstd -lz -llzma -llz4 -llzo2 \
+      -lfuse3 -lsquashfuse_ll -lzstd -lz -llzma -llz4 -llzo2 \
       -T src/data_sections.ld
 
     # Add AppImage Type 2 Magic Bytes to runtime
@@ -73,7 +79,7 @@ stdenv.mkDerivation {
 #
 # $CC $src/src/main.c -o $out \
 #   -I./include -D_FILE_OFFSET_BITS=64 -DGIT_COMMIT='"0000000"' \
-#   -lfuse -lsquashfuse_ll -lzstd -lz -llzma -llz4 -llzo2 \
+#   -lfuse -lsquashfuse_ll -lzstd -lz -lxz -llz4 -llzo2 \
 #   -T $src/src/data_sections.ld
 #
 # # Add AppImage Type 2 Magic Bytes to runtime
