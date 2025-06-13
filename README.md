@@ -36,9 +36,8 @@ OpenGL apps not being able to run on non-NixOS systems is a **known problem**, s
 You'll need to use something like [nixGL](https://github.com/guibou/nixGL).
 Addressing this problem outright is _out of scope_ for this project, however PRs to integrate solutions (e.g. nixGL) are welcome.
 
-Additionally, the produced file isn't a _fully_ conforming AppImage.
-For example, it's missing the relevant .desktop file and icons -- this doesn't affect the running of bundled apps in any way, but might cause issues with showing up correctly in application launchers (e.g. rofi).
-Please open an issue if this is something you want.
+Additionally, we only make a best-effort attempt to copy in the relevant .desktop files and icons, so they may not be present.
+This doesn't affect the running of bundled apps, but might cause issues with showing up correctly in application launchers (e.g. rofi).
 
 The current implementation also has some limitations:
 
