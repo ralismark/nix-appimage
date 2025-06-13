@@ -55,12 +55,16 @@ let
 in
 runCommand name
 {
-  nativeBuildInputs = [ squashfsTools ];
+  nativeBuildInputs = [
+    squashfsTools
+  ];
 } ''
   if ! test -x ${program}; then
     echo "entrypoint '${program}' is not executable"
     exit 1
   fi
+
+  ${./extra-files.sh} ${program}
 
   mksquashfs ${builtins.concatStringsSep " " ([
     # first run of mksquashfs copies the nix/store closure and additional files
@@ -79,7 +83,8 @@ runCommand name
   mksquashfs ${builtins.concatStringsSep " " ([
     # second run of mksquashfs adds the apprun
     # no -no-strip since we *do* want to strip leading dirs now
-    "${mkappimage-apprun}"
+    "${mkappimage-apprun}/*"
+    "$(find extras -mindepth 1 -maxdepth 1)" # to include .DirIcon
     "$out"
     "-no-recovery" # i don't know what a recovery file is but it gives "No such file or directory"
   ] ++ commonArgs)}
