@@ -56,7 +56,7 @@ fi
 # create DirIcon
 
 grep ^Icon= "$desktop" | while IFS="=" read -r _ icon; do
-	for size in 128x128 64x64 scalable; do
+	for size in 256x256 128x128 64x64 scalable; do
 		for f in "${drv}/share/icons/hicolor/$size/apps/${icon}".*; do
 			[ -e "$f" ] || continue
 
