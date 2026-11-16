@@ -175,18 +175,22 @@ void child_main(char** argv)
 		free((void*) to);
 	}
 
-	// mkdir /nix
+	// mkdir -p /nix/store
 	const char* nix_in_mountroot = strprintf("%s/nix", mountroot);
 	die_if(mkdir(nix_in_mountroot, 0777) < 0, "mkdir %s", nix_in_mountroot);
-	free((void*) nix_in_mountroot);
 
-	// overlay outer /nix/store with our /nix/store
+	const char* nix_from = strprintf("%s/nix", appdir);
 	const char* nix_to = strprintf("%s/nix/store", mountroot);
 	die_if(mkdir(nix_to, 0777) < 0, "mkdir %s", nix_to);
 
+	// attempt to overlay mount, falling back to bind mount if failing
 	const char* overlay_opts = strprintf("lowerdir=%s/nix/store:/nix/store", appdir);
-	die_if(mount("overlay", nix_to, "overlay", MS_RDONLY, overlay_opts) < 0, "overlay %s -> %s", overlay_opts, nix_to);
+	if (mount("overlay", nix_to, "overlay", MS_RDONLY, overlay_opts) < 0) {
+		die_if(mount(nix_from, nix_to, "none", MS_BIND | MS_REC, 0) < 0, "mount %s -> %s", nix_from, nix_to);
+	}
 
+	free((void*) nix_in_mountroot);
+	free((void*) nix_from);
 	free((void*) nix_to);
 	free((void*) overlay_opts);
 

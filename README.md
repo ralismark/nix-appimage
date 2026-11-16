@@ -6,20 +6,20 @@ Like [nix-bundle](https://github.com/matthewbauer/nix-bundle), but much faster a
 ## Getting started
 
 To use this, you will need to have [Nix](https://nixos.org/) available.
-Then, run this via the [nix bundle](https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-bundle.html) interface, replacing `nixpkgs.hello` with the flake you want to build:
+Then, run this via the [nix bundle](https://nixos.org/manual/nix/unstable/command-ref/new-cli/nix3-bundle.html) interface, replacing `nixpkgs#hello` with the flake you want to build:
 
 ```
 $ nix bundle --bundler github:ralismark/nix-appimage nixpkgs#hello
 ```
 
-This produces `hello.AppImage`, which prints "Hello world!" when run:
+This produces `hello.AppImage`, which prints "Hello, world!" when run:
 
 ```
 $ ./hello.AppImage
 Hello, world!
 ```
 
-If you get a `entrypoint ... is not executable` error, or want to specify a different binary to run, you can instead use the `./bundle` script:
+If you get an `entrypoint ... is not executable` error, or want to specify a different binary to run, you can instead use the `./bundle` script:
 
 ```
 $ ./bundle dnsutils /bin/dig # or ./bundle dnsutils dig
@@ -34,14 +34,17 @@ See mkAppImage.nix for details.
 
 OpenGL apps not being able to run on non-NixOS systems is a **known problem**, see https://github.com/NixOS/nixpkgs/issues/9415 and https://github.com/ralismark/nix-appimage/issues/5.
 You'll need to use something like [nixGL](https://github.com/guibou/nixGL).
-Addressing this problem outright is _out of scope_ for this project, however PRs to integrate solutions (e.g. nixGL) are welcome.
+I have no plans to implement a solution myself, however PRs (e.g. to integrate nixGL, to bundling and bind-mounting `/run/opengl-driver`) are welcome.
 
 Additionally, we only make a best-effort attempt to copy in the relevant .desktop files and icons, so they may not be present.
 This doesn't affect the running of bundled apps, but might cause issues with showing up correctly in application launchers (e.g. rofi).
 
+Because we need to overlay our bundled /nix/store over the outer system's /nix/store, nix commands (and generally anything that inspects/modifies `/nix`) may not work.
+
 The current implementation also has some limitations:
 
 - This requires Linux User Namespaces (i.e. `CAP_SYS_USER_NS`), which are available since Linux 3.8 (released in 2013), but may not be enabled for security reasons.
+- We only map the user's uid and gid into the user namespace, so files owned by other users, including root, appear to be owned by `nobody/nogroup`, and setuid programs like sudo will not work.
 - Plain files in the root directory aren't visible to the bundled app.
 
 ## Under The Hood
@@ -68,4 +71,3 @@ Currently supported are:
 
 - `userns-chroot` (default).
   This uses Linux User Namespaces and chroot to make /nix/store appear to have the bundled files, similar to [nix-user-chroot](https://github.com/nix-community/nix-user-chroot).
-  There is a known problem of plain files in the root folder not being visible to the bundled app when using this AppRun.
