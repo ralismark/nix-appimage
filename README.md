@@ -55,7 +55,7 @@ The squashfs contains all the files needed to run the program:
 - `AppRun`, which gets started after the squashfs is mounted.
   This isn't the actual bundled executable, but a wrapper that makes the bundled nix/store file visible under /nix/store before executing `entrypoint`.
 
-Runtimes are included within the flake as `packages.<system>.appimage-runtimes.<name>`.
+Runtimes are included within the flake as `appimage-runtimes.<system>.<name>`.
 Currently supported are:
 
 - `appimage-type2-runtime` (default)
@@ -63,7 +63,7 @@ Currently supported are:
 - `appimagecrafters`.
   This is [AppImageCrafers/appimage-runtime](https://github.com/AppImageCrafters/appimage-runtime), a similar static runtime that was the old default for nix-appimage.
 
-AppRuns are included within the flake as `packages.<system>.appimage-appruns.<name>`.
+AppRuns are included within the flake as `appimage-appruns.<system>.<name>`.
 Currently supported are:
 
 - `userns-chroot` (default).

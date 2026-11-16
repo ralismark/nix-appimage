@@ -1,33 +1,27 @@
-{ fetchFromGitHub
-, stdenv
-, fuse3
-, pkg-config
-, squashfuse
-, zstd
-, zlib
-, xz
-, lz4
-, lzo
+{
+  fuse3,
+  lz4,
+  lzo,
+  pkg-config,
+  squashfuse,
+  stdenv,
+  xz,
+  zlib,
+  zstd,
+
+  # from flake input
+  src,
 }:
 
 let
-  src = fetchFromGitHub {
-    owner = "AppImage";
-    repo = "type2-runtime";
-    rev = "01164bfcbc8dd2bd0d7e3706f97035108d6b91ba";
-    hash = "sha256-GR3LMuWMSafQmc2RQyveue3sq+HYBtl+VkcZVYMS0CI=";
-  };
-
   fuse3' = fuse3.overrideAttrs (old: {
-    patches = (old.patches or []) ++ [
+    patches = (old.patches or [ ]) ++ [
       # this doesn't work -- causes fuse: failed to exec fusermount: Permission denied
       # "${src}/patches/libfuse/mount.c.diff"
     ];
   });
 
-  squashfuse' = (squashfuse.override {
-    fuse3 = fuse3';
-  }).overrideAttrs (old: {
+  squashfuse' = squashfuse.overrideAttrs (old: {
     postInstall = (old.postInstall or "") + ''
       cp *.h -t $out/include/squashfuse/
     '';
@@ -35,7 +29,9 @@ let
 in
 stdenv.mkDerivation {
   pname = "appimage-type2-runtime";
-  version = "unstable-2024-08-17";
+  version = "0-unstable-${builtins.substring 0 4 src.lastModifiedDate}-${
+    builtins.substring 4 2 src.lastModifiedDate
+  }-${builtins.substring 6 2 src.lastModifiedDate}-${src.shortRev}";
 
   inherit src;
 
@@ -49,10 +45,6 @@ stdenv.mkDerivation {
     lz4
     lzo
   ];
-
-  patchPhase = ''
-    sed -e '/sqfs_usage/s/);/, true\0/' -i src/runtime/runtime.c
-  '';
 
   configurePhase = ''
     $PKG_CONFIG --cflags fuse3 > cflags

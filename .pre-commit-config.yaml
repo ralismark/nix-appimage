@@ -8,7 +8,11 @@ repos:
     -   id: end-of-file-fixer
     -   id: check-yaml
     -   id: check-added-large-files
--   repo: https://github.com/nix-community/nixpkgs-fmt
-    rev: v1.3.0
+
+-   repo: local
     hooks:
-    -   id: nixpkgs-fmt
+    -   id: nix-fmt
+        name: nix fmt
+        types: [nix]
+        entry: nix fmt
+        language: system

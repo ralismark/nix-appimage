@@ -1,25 +1,26 @@
-{ fetchFromGitHub
-, fuse3
-, lz4
-, xz
-, lzo
-, pkg-config
-, squashfuse
-, stdenv
-, zlib
-, zstd
+{
+  fetchFromGitHub,
+  fuse3,
+  lz4,
+  xz,
+  lzo,
+  pkg-config,
+  squashfuse,
+  stdenv,
+  zlib,
+  zstd,
+
+  # passed in from flake
+  src,
 }:
 
 stdenv.mkDerivation {
   pname = "appimagecrafters-runtime";
-  version = "unstable-2022-05-12";
+  version = "0-unstable-${builtins.substring 0 4 src.lastModifiedDate}-${
+    builtins.substring 4 2 src.lastModifiedDate
+  }-${builtins.substring 6 2 src.lastModifiedDate}-${src.shortRev}";
 
-  src = fetchFromGitHub {
-    owner = "AppImageCrafters";
-    repo = "appimage-runtime";
-    rev = "6500a1ef68e039caba2ebab1c7ed74c2ea9e67a5";
-    hash = "sha256-uxQBDy/JA7uEboTOUmGaZ2FAKY/0dQ9c0A0N8+J+a7I=";
-  };
+  src = src;
 
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [
@@ -30,6 +31,8 @@ stdenv.mkDerivation {
     xz
     lz4
     lzo
+    xz
+    zlib
   ];
 
   prePatch = ''
@@ -39,7 +42,7 @@ stdenv.mkDerivation {
   patches = [
     # basename() patch from
     # https://github.com/AppImageCrafters/appimage-runtime/pull/14/commits/23f655a9313a6b962e072f12534982b925ecb8f7
-    ./basename.patch 
+    ./basename.patch
   ];
 
   configurePhase = ''

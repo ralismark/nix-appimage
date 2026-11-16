@@ -1,4 +1,5 @@
-{ runCommandCC
+{
+  runCommandCC,
 }:
 
 runCommandCC "AppRun" { } ''
