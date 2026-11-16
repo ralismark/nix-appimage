@@ -1,0 +1,19 @@
+name: nix-flake-update
+on:
+  workflow_dispatch: # allows manual triggering
+  schedule:
+    - cron: '59 21 27 * *' # statically random time each month
+
+jobs:
+  nix-flake-update:
+    permissions:
+      contents: write
+      id-token: write
+      issues: write
+      pull-requests: write
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: DeterminateSystems/update-flake-lock@v29
