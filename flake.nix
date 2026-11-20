@@ -42,6 +42,7 @@
         # appruns contain an AppRun executable that does setup and launches entrypoint
         appimage-appruns = {
           userns-chroot = pkgs.callPackage ./appruns/userns-chroot { };
+          bwrap = pkgs.callPackage ./appruns/bwrap { };
         };
 
         lib.mkAppImage = pkgs.callPackage ./mkAppImage.nix {
