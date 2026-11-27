@@ -179,7 +179,7 @@ void child_main(char** argv)
 	const char* nix_in_mountroot = strprintf("%s/nix", mountroot);
 	die_if(mkdir(nix_in_mountroot, 0777) < 0, "mkdir %s", nix_in_mountroot);
 
-	const char* nix_from = strprintf("%s/nix", appdir);
+	const char* nix_from = strprintf("%s/nix/store", appdir);
 	const char* nix_to = strprintf("%s/nix/store", mountroot);
 	die_if(mkdir(nix_to, 0777) < 0, "mkdir %s", nix_to);
 
